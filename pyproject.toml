@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geo-foundation-adapt"
+version = "0.1.0"
+description = "Parameter-efficient adaptation / linear probe demos on tiny remote-sensing style data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.1.0",
+  "torchvision>=0.16.0",
+  "numpy>=1.26.0",
+  "matplotlib>=3.8.0",
+  "tqdm>=4.66.0",
+]
+
+[project.scripts]
+geo-foundation-adapt = "geo_foundation_adapt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

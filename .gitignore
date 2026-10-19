@@ -9,4 +9,9 @@ build/
 .DS_Store
 checkpoints/*.pt
 !checkpoints/.gitkeep
+data/eurosat/
+data/weights/
 data/raw/
+*.zip
+*.pth
+*.partial

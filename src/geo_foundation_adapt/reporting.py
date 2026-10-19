@@ -191,10 +191,10 @@ def save_figure(payload: dict, path: Path) -> None:
         ax.set_xticks(xticks)
         ax.set_xticklabels([str(tick) for tick in xticks])
         ax.set_xlabel("Labeled images per class")
-    handles, labels = axes[1].get_legend_handles_labels()
-    # The majority line is drawn on both panels; keep a single legend entry.
+    handles, labels = axes[0].get_legend_handles_labels()
+    # The high-label points sit in the lower right. The upper left is empty.
     dedup = dict(zip(labels, handles))
-    axes[1].legend(dedup.values(), dedup.keys(), frameon=False, fontsize=8, loc="lower right")
+    axes[0].legend(dedup.values(), dedup.keys(), frameon=False, fontsize=8, loc="upper left")
     backbone = payload["backbone"]["name"]
     n_seeds = payload["protocol"]["n_seeds"]
     fig.suptitle(f"EuroSAT RGB spatial split — {backbone} ({n_seeds} seeds)", fontsize=12)

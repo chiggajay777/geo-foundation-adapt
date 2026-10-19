@@ -42,7 +42,7 @@ def write_reports(out_dir: Path, payload: dict, publish_figures: Path | None) ->
     seed_header = (
         "seed,label_fraction,labels_per_class,n_train,method,test_accuracy,test_macro_f1,"
         "val_accuracy,val_macro_f1,train_accuracy,train_macro_f1,best_epoch,epochs_ran,"
-        "trainable_params,seconds"
+        "trainable_params,max_epochs,seconds"
     )
     seed_lines = [seed_header]
     for row in payload["runs"]:
@@ -63,6 +63,7 @@ def write_reports(out_dir: Path, payload: dict, publish_figures: Path | None) ->
                     str(row["best_epoch"]),
                     str(row["epochs_ran"]),
                     str(row["trainable_params"]),
+                    str(row["max_epochs"]),
                     _num(row["seconds"]),
                 ]
             )

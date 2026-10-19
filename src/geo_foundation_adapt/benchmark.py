@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import platform
 import time
 from dataclasses import dataclass, field
@@ -43,6 +44,9 @@ SECO_SHA256 = "cefca942e0765c9b6dea779e83bb328c8535dc9a3d49fb90e8b294525e8ef891"
 SECO_BYTES = 44_781_193
 
 METHODS = ("linear_probe", "lora", "full_finetune")
+# 2 images/class is one optimizer step per epoch at batch size 64.
+# Eight epochs is then eight updates, which is not a finished LoRA or finetune.
+MIN_ADAPT_STEPS = 40
 
 
 @dataclass
@@ -197,6 +201,21 @@ def _embed(
     return torch.cat(chunks, dim=0)
 
 
+def planned_budget(method: str, n_train: int, cfg: BenchmarkConfig) -> tuple[int, int]:
+    """Return (max_epochs, patience) for this subset.
+
+    LoRA and full finetune keep ``cfg.epochs`` when the subset already yields
+    enough updates, and otherwise extend until ``MIN_ADAPT_STEPS`` updates.
+    The extension is capped at 8× the base epoch count.
+    """
+    if method == "linear_probe":
+        return cfg.probe_epochs, cfg.probe_patience
+    steps_per_epoch = max(1, math.ceil(n_train / cfg.batch_size))
+    needed = math.ceil(MIN_ADAPT_STEPS / steps_per_epoch)
+    epochs = min(max(cfg.epochs, needed), cfg.epochs * 8)
+    return epochs, cfg.patience
+
+
 def _optimizer(model: nn.Module, method: str, cfg: BenchmarkConfig) -> torch.optim.Optimizer:
     head = [p for n, p in model.named_parameters() if p.requires_grad and n.startswith("fc.")]
     other = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith("fc.")]
@@ -237,8 +256,7 @@ def _train_model(
     epochs_ran = 0
     n_classes = len(CLASS_NAMES)
     y_val = labels.numpy()[val_idx]
-    max_epochs = cfg.probe_epochs if method == "linear_probe" else cfg.epochs
-    patience = cfg.probe_patience if method == "linear_probe" else cfg.patience
+    max_epochs, patience = planned_budget(method, len(train_idx), cfg)
 
     for epoch in range(1, max_epochs + 1):
         epochs_ran = epoch
@@ -309,6 +327,7 @@ def _train_model(
     return {
         "best_epoch": best_epoch,
         "epochs_ran": epochs_ran,
+        "max_epochs": max_epochs,
         "val_accuracy": best_val_acc,
         "val_macro_f1": best_f1,
     }
@@ -408,8 +427,10 @@ def run_benchmark(cfg: BenchmarkConfig) -> dict:
             counts = per_class_counts(train_idx, labels_np, len(CLASS_NAMES))
             labels_per_class = counts[0] if len(set(counts)) == 1 else -1
             for method in METHODS:
+                max_epochs, _patience = planned_budget(method, len(train_idx), cfg)
                 print(
-                    f"seed={seed} fraction={fraction:g} n_train={len(train_idx)} method={method}",
+                    f"seed={seed} fraction={fraction:g} n_train={len(train_idx)} "
+                    f"method={method} max_epochs={max_epochs}",
                     flush=True,
                 )
                 t0 = time.perf_counter()
@@ -466,6 +487,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> dict:
                         "train_macro_f1": train_scores["macro_f1"],
                         "best_epoch": fit["best_epoch"],
                         "epochs_ran": fit["epochs_ran"],
+                        "max_epochs": fit["max_epochs"],
                         "trainable_params": int(trainable),
                         "seconds": seconds,
                     }
@@ -561,9 +583,11 @@ def run_benchmark(cfg: BenchmarkConfig) -> dict:
             "patience": cfg.patience,
             "probe_epochs": cfg.probe_epochs,
             "probe_patience": cfg.probe_patience,
+            "min_adapt_steps": MIN_ADAPT_STEPS,
             "epoch_budget_note": (
                 "Linear probe epochs are a cap on the classification head only. "
-                "LoRA and full finetune use the shorter cap because each epoch forwards the ResNet."
+                "LoRA and full finetune use the base epoch cap, extended so each run "
+                f"gets at least {MIN_ADAPT_STEPS} optimizer steps when the subset is small."
             ),
         },
         "protocol": {
@@ -586,6 +610,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> dict:
             "patience": cfg.patience,
             "probe_epochs": cfg.probe_epochs,
             "probe_patience": cfg.probe_patience,
+            "min_adapt_steps": MIN_ADAPT_STEPS,
             "batch_size": cfg.batch_size,
             "eval_batch_size": cfg.eval_batch_size,
             "std": "sample standard deviation, divisor n-1; null when n_seeds < 2",
@@ -596,6 +621,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> dict:
                 "The spatial test band is not used to choose epochs, learning rates, or the backbone.",
                 "The validation slice is class-balanced. The spatial test band keeps its natural class counts.",
                 "No geometric augmentation. The comparison is the adaptation rule, not a flip policy.",
+                "LoRA and full finetune use at least 40 optimizer steps. The 2,000-image run stays at 8 epochs.",
             ],
         },
         "baselines": {

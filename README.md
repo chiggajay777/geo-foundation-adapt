@@ -48,7 +48,9 @@ Same new 10-way head for every method. No flip augmentation, so the gap is the a
 | `lora` | head + LoRA on `layer4` 3×3 convs, rank 8, alpha 16 | 1e-3 | frozen, eval |
 | `full_finetune` | every weight | head 1e-3, backbone 1e-4 | train mode, running stats update |
 
-LoRA uses the usual convolution factorization: a k×k map down to the rank, then a 1×1 map back, with the second matrix initialized at 0 so step 0 matches the frozen conv. The residual downsample (1×1) stays frozen. The linear probe trains on embeddings extracted once from that frozen eval-mode network; with no augmentation that matches an online frozen forward. LoRA and full finetune stop after at most 8 epochs with patience 3. The linear head is allowed 30 epochs and patience 6, because an epoch does not touch the ResNet and a probe that is cut off after a handful of steps is not the linear probe this comparison means. Batch size is 64. Seeds are 0, 1, and 2. The head seed is reset per method so method order does not change initialization.
+LoRA uses the usual convolution factorization: a k×k map down to the rank, then a 1×1 map back, with the second matrix initialized at 0 so step 0 matches the frozen conv. The residual downsample (1×1) stays frozen. The linear probe trains on embeddings extracted once from that frozen eval-mode network; with no augmentation that matches an online frozen forward.
+
+The linear head is allowed 30 epochs and patience 6. An epoch of the head does not touch the ResNet. LoRA and full finetune use a base cap of 8 epochs and patience 3, with a floor of 40 optimizer steps so the 20-image subset is not an 8-step run. At batch size 64 that floor is 40 epochs for 20 images, 10 epochs for 200 images, and it does not extend the 2,000-image run past 8 epochs. The floor is capped at 8× the base epoch count. A discarded one-seed check (not in the table) was still improving LoRA's validation macro-F1 after 8 updates on 20 images; the published rule was set from that, before the three-seed run. Batch size is 64. Seeds are 0, 1, and 2. The head seed is reset per method so method order does not change initialization.
 
 The spatial-train majority baseline predicts the most common class in the full 16,200-chip train band (ties break to the smaller class index) and is scored on the same test chips. It does not depend on the seed. Uniform chance accuracy on 10 classes is 0.10; the spatial split moves class mass, so the train-majority accuracy is not 0.10.
 
@@ -88,7 +90,7 @@ The measured table is written here after the reproduce command finishes. Until t
 - EuroSAT RGB is an 8-bit JPEG, not 13-band reflectance. SeCo was pretrained on quantile-stretched reflectance. The domain gap is real; ImageNet initialization is the implemented control (`--backbone imagenet`) and is not the published table.
 - ResNet-18 SeCo is not Prithvi, SatMAE, DOFA, or Clay.
 - BatchNorm in full finetune uses batch statistics. At 2 images per class the batch is smaller than 64, so those updates are a harsh test of full finetune rather than a tuned small-batch recipe.
-- Learning rates, rank, the two epoch caps, and the 224 input size were fixed for this CPU protocol. They were not swept on the test band. The linear head has a longer cap than LoRA and full finetune because its epochs are cheap.
+- Learning rates, rank, the step floor, and the 224 input size were fixed for this CPU protocol. They were not swept on the test band. The 40-step floor exists because a 20-image epoch is a single update at batch size 64. The linear head has a longer epoch cap because its epochs are cheap.
 - Chips near a longitude cut can still be correlated. The spatial split removes same-location random leakage; it does not make the bands independent landscapes.
 - No geometric augmentation. Flips would likely move the low-label full-finetune number and are a separate control.
 

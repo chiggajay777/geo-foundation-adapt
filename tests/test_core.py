@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from torchvision.models import resnet18
 
+from geo_foundation_adapt.benchmark import BenchmarkConfig, planned_budget
 from geo_foundation_adapt.data import SPLIT_SHA256, nested_subsets, per_class_counts, read_split
 from geo_foundation_adapt.metrics import macro_f1_from_cm, mean_std, scores
 from geo_foundation_adapt.models import LoRAConv2d, build_resnet18, count_trainable
@@ -58,6 +59,15 @@ class SplitTest(unittest.TestCase):
         self.assertEqual(per_class_counts(full, labels, 10), [100] * 10)
         again = nested_subsets(pool, labels, [0.01, 0.1, 1.0], seed=3, n_classes=10)
         self.assertTrue(np.array_equal(again[0.1], mid))
+
+
+class BudgetTest(unittest.TestCase):
+    def test_small_subsets_get_a_step_floor(self):
+        cfg = BenchmarkConfig()
+        self.assertEqual(planned_budget("linear_probe", 20, cfg), (30, 6))
+        self.assertEqual(planned_budget("lora", 20, cfg), (40, 3))
+        self.assertEqual(planned_budget("full_finetune", 200, cfg), (10, 3))
+        self.assertEqual(planned_budget("lora", 2000, cfg), (8, 3))
 
 
 class AdaptationInitTest(unittest.TestCase):
